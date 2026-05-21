@@ -1,282 +1,285 @@
 USE StockMarket;
 
--- Table 1: Company info
-CREATE TABLE companies (
-    ticker      VARCHAR(10)  PRIMARY KEY,
-    company_name VARCHAR(100) NOT NULL,
-    sector      VARCHAR(50),
-    country     VARCHAR(50)
-);
+-- ============================================================
+-- MARKET PULSE SQL — Full Analysis File
+-- Updated to use real 1-year OHLCV data from Yahoo Finance
+-- Tables: companies (5 rows) + StockPrices (1,255 rows)
+-- Stocks: AAPL, TSLA, MSFT, GOOGL, AMZN
+-- ============================================================
 
--- Table 2: Daily stock prices
-CREATE TABLE stock_prices (
-    id          INT IDENTITY(1,1) PRIMARY KEY,
-    ticker      VARCHAR(10)  NOT NULL,
-    price_date  DATE         NOT NULL,
-    open_price  DECIMAL(10,2),
-    close_price DECIMAL(10,2),
-    high_price  DECIMAL(10,2),
-    low_price   DECIMAL(10,2),
-    volume      BIGINT
-);
+-- Quick sanity check before running
+SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE';
 
--- Add 5 well-known companies
-INSERT INTO companies VALUES ('AAPL', 'Apple Inc.',        'Technology',   'USA');
-INSERT INTO companies VALUES ('TSLA', 'Tesla Inc.',        'Automotive',   'USA');
-INSERT INTO companies VALUES ('GOOGL','Alphabet Inc.',     'Technology',   'USA');
-INSERT INTO companies VALUES ('MSFT', 'Microsoft Corp.',   'Technology',   'USA');
-INSERT INTO companies VALUES ('AMZN', 'Amazon.com Inc.',   'E-Commerce',   'USA');
 
--- Add some price data
-INSERT INTO stock_prices (ticker, price_date, open_price, close_price, high_price, low_price, volume) VALUES
-('AAPL', '2024-01-02', 185.00, 187.15, 188.20, 184.50, 52000000),
-('AAPL', '2024-01-03', 187.00, 184.40, 187.90, 183.80, 48000000),
-('AAPL', '2024-01-04', 184.50, 182.30, 185.10, 181.90, 55000000),
-('TSLA', '2024-01-02', 250.00, 248.50, 253.00, 247.00, 31000000),
-('TSLA', '2024-01-03', 248.50, 255.00, 256.40, 247.80, 38000000),
-('TSLA', '2024-01-04', 255.00, 251.30, 257.00, 250.00, 29000000),
-('MSFT', '2024-01-02', 374.00, 376.40, 377.50, 373.00, 21000000),
-('MSFT', '2024-01-03', 376.00, 373.90, 376.80, 372.50, 19000000),
-('GOOGL','2024-01-02', 140.00, 141.80, 142.50, 139.50, 24000000),
-('AMZN', '2024-01-02', 153.00, 155.20, 156.00, 152.50, 44000000);
-
+-- ============================================================
+-- PHASE 1: Basic SELECT, WHERE, Filtering
+-- ============================================================
 
 -- See all companies
 SELECT * FROM companies;
 
--- See all price data
-SELECT * FROM stock_prices;
+-- See all price data (1,255 rows of real data)
+SELECT * FROM StockPrices;
 
 -- Only Apple prices
-SELECT * FROM stock_prices
-WHERE ticker = 'AAPL';
+SELECT * FROM StockPrices
+WHERE Ticker = 'AAPL';
 
--- Only closing prices, cleanly
-SELECT ticker, price_date, close_price
-FROM stock_prices
-WHERE ticker = 'TSLA';
+-- Only closing prices for Tesla
+SELECT Ticker, Date, [Close]
+FROM StockPrices
+WHERE Ticker = 'TSLA';
 
-SELECT company_name, country 
+-- Which companies are in the Automotive sector?
+SELECT company_name, country
 FROM companies
-WHERE sector  = 'Automotive';
+WHERE sector = 'Automotive';
+
+-- Latest 10 rows of data
+SELECT TOP 10 * FROM StockPrices
+ORDER BY Date DESC;
 
 
-
+-- ============================================================
 -- PHASE 2: Sorting & Aggregation
+-- ============================================================
 
 -- Which stock had the highest closing price ever?
-SELECT ticker, price_date, close_price
-FROM stock_prices
-ORDER BY close_price DESC;
+SELECT Ticker, Date, [Close]
+FROM StockPrices
+ORDER BY [Close] DESC;
 
 -- Which stock had the highest opening price ever?
-SELECT ticker, price_date, open_price
-FROM stock_prices
-ORDER BY open_price DESC;
+SELECT Ticker, Date, [Open]
+FROM StockPrices
+ORDER BY [Open] DESC;
 
-
--- Average closing price per stock
-SELECT ticker, AVG(close_price) AS avg_close
-FROM stock_prices
-GROUP BY ticker;
+-- Average closing price per stock (over 1 year)
+SELECT Ticker, ROUND(AVG([Close]), 2) AS avg_close
+FROM StockPrices
+GROUP BY Ticker
+ORDER BY avg_close DESC;
 
 -- Best single-day closing price per stock
-SELECT ticker, MAX(close_price) AS best_close
-FROM stock_prices
-GROUP BY ticker
+SELECT Ticker, MAX([Close]) AS best_close
+FROM StockPrices
+GROUP BY Ticker
 ORDER BY best_close DESC;
 
--- Which day had the most trading volume? (most active market day)
-SELECT price_date, SUM(volume) AS total_volume
-FROM stock_prices
-GROUP BY price_date
+-- Worst single-day closing price per stock
+SELECT Ticker, MIN([Close]) AS worst_close
+FROM StockPrices
+GROUP BY Ticker
+ORDER BY worst_close DESC;
+
+-- Which day had the most total trading volume across all stocks?
+SELECT Date, SUM(Volume) AS total_volume
+FROM StockPrices
+GROUP BY Date
 ORDER BY total_volume DESC;
 
--- How many days of data do we have per stock?
-SELECT ticker, COUNT(*) AS trading_days
-FROM stock_prices
-GROUP BY ticker;
+-- How many trading days of data do we have per stock?
+SELECT Ticker, COUNT(*) AS trading_days
+FROM StockPrices
+GROUP BY Ticker;
 
+
+-- ============================================================
 -- PHASE 3: JOINs
+-- ============================================================
 
 -- Basic JOIN: show company name alongside its prices
-SELECT c.company_name, c.sector, sp.price_date, sp.close_price
-FROM stock_prices AS sp
-INNER JOIN companies AS c ON sp.ticker = c.ticker;
+SELECT c.company_name, c.sector, sp.Date, sp.[Close]
+FROM StockPrices AS sp
+INNER JOIN companies AS c ON sp.Ticker = c.ticker;
 
--- -try case 
-SELECT c.country, sp.high_price
-FROM stock_prices AS sp 
-INNER JOIN companies AS c ON sp.ticker = c.ticker;
+-- Country and high price
+SELECT c.country, sp.High
+FROM StockPrices AS sp
+INNER JOIN companies AS c ON sp.Ticker = c.ticker;
 
 -- Which sector had the highest average closing price?
-SELECT c.sector, AVG(sp.close_price) AS avg_close
-FROM stock_prices AS sp
-INNER JOIN companies AS c ON sp.ticker = c.ticker
+SELECT c.sector, ROUND(AVG(sp.[Close]), 2) AS avg_close
+FROM StockPrices AS sp
+INNER JOIN companies AS c ON sp.Ticker = c.ticker
 GROUP BY c.sector
 ORDER BY avg_close DESC;
 
 -- Full company name with their best single day price
-SELECT c.company_name, MAX(sp.close_price) AS best_price
-FROM stock_prices AS sp
-INNER JOIN companies AS c ON sp.ticker = c.ticker
+SELECT c.company_name, MAX(sp.[Close]) AS best_price
+FROM StockPrices AS sp
+INNER JOIN companies AS c ON sp.Ticker = c.ticker
 GROUP BY c.company_name
 ORDER BY best_price DESC;
 
 -- Show all companies even if they have NO price data (LEFT JOIN)
-SELECT c.company_name, c.sector, sp.close_price, sp.price_date
+SELECT c.company_name, c.sector, sp.[Close], sp.Date
 FROM companies AS c
-LEFT JOIN stock_prices AS sp ON c.ticker = sp.ticker;
+LEFT JOIN StockPrices AS sp ON c.ticker = sp.Ticker;
+
+-- Latest closing price per stock with full company name
+SELECT c.company_name, c.sector, sp.Date, sp.[Close]
+FROM StockPrices sp
+INNER JOIN companies c ON sp.Ticker = c.ticker
+WHERE sp.Date = (SELECT MAX(Date) FROM StockPrices)
+ORDER BY sp.[Close] DESC;
 
 
+-- ============================================================
 -- PHASE 4: Subqueries & CTEs
+-- ============================================================
 
 -- SUBQUERY: stocks with closing price above overall market average
-SELECT ticker, price_date, close_price
-FROM stock_prices
-WHERE close_price > (SELECT AVG(close_price) FROM stock_prices);
+SELECT Ticker, Date, [Close]
+FROM StockPrices
+WHERE [Close] > (SELECT AVG([Close]) FROM StockPrices);
 
--- SUBQUERY: companies that have more than 1 day of price data
+-- SUBQUERY: companies that have more than 100 days of price data
 SELECT company_name, sector
 FROM companies
 WHERE ticker IN (
-    SELECT ticker
-    FROM stock_prices
-    GROUP BY ticker
-    HAVING COUNT(*) > 1
+    SELECT Ticker
+    FROM StockPrices
+    GROUP BY Ticker
+    HAVING COUNT(*) > 100
 );
 
 -- CTE: calculate each stock's average, then rank them
 WITH stock_avg AS (
-    SELECT ticker, AVG(close_price) AS avg_close
-    FROM stock_prices
-    GROUP BY ticker
+    SELECT Ticker, ROUND(AVG([Close]), 2) AS avg_close
+    FROM StockPrices
+    GROUP BY Ticker
 )
 SELECT c.company_name, c.sector, sa.avg_close
 FROM stock_avg AS sa
-INNER JOIN companies AS c ON sa.ticker = c.ticker
+INNER JOIN companies AS c ON sa.Ticker = c.ticker
 ORDER BY sa.avg_close DESC;
 
 -- CTE: find stocks beating their own sector average
 WITH sector_avg AS (
-    SELECT c.sector, AVG(sp.close_price) AS sector_close_avg
-    FROM stock_prices AS sp
-    INNER JOIN companies AS c ON sp.ticker = c.ticker
+    SELECT c.sector, AVG(sp.[Close]) AS sector_close_avg
+    FROM StockPrices AS sp
+    INNER JOIN companies AS c ON sp.Ticker = c.ticker
     GROUP BY c.sector
 ),
 stock_avg AS (
-    SELECT ticker, AVG(close_price) AS avg_close
-    FROM stock_prices
-    GROUP BY ticker
+    SELECT Ticker, AVG([Close]) AS avg_close
+    FROM StockPrices
+    GROUP BY Ticker
 )
-SELECT c.company_name, c.sector, 
-       sa.avg_close        AS stock_avg,
-       sea.sector_close_avg AS sector_avg
+SELECT c.company_name, c.sector,
+       ROUND(sa.avg_close, 2)         AS stock_avg,
+       ROUND(sea.sector_close_avg, 2) AS sector_avg
 FROM stock_avg AS sa
-INNER JOIN companies AS c   ON sa.ticker = c.ticker
-INNER JOIN sector_avg AS sea ON c.sector = sea.sector
+INNER JOIN companies AS c    ON sa.Ticker = c.ticker
+INNER JOIN sector_avg AS sea ON c.sector  = sea.sector
 WHERE sa.avg_close > sea.sector_close_avg;
 
 
-
+-- ============================================================
 -- PHASE 5: Window Functions
+-- ============================================================
 
 -- RANK: rank each stock by its average closing price
-SELECT 
+SELECT
     c.company_name,
     c.sector,
-    AVG(sp.close_price) AS avg_close,
-    RANK() OVER (ORDER BY AVG(sp.close_price) DESC) AS price_rank
-FROM stock_prices sp
-JOIN companies c ON sp.ticker = c.ticker
+    ROUND(AVG(sp.[Close]), 2) AS avg_close,
+    RANK() OVER (ORDER BY AVG(sp.[Close]) DESC) AS price_rank
+FROM StockPrices sp
+JOIN companies c ON sp.Ticker = c.ticker
 GROUP BY c.company_name, c.sector;
 
 -- RANK within sector: which stock is #1 in its own sector?
-SELECT 
+SELECT
     c.company_name,
     c.sector,
-    sp.close_price,
-    sp.price_date,
-    RANK() OVER (PARTITION BY c.sector ORDER BY sp.close_price DESC) AS rank_in_sector
-FROM stock_prices sp
-JOIN companies c ON sp.ticker = c.ticker;
+    sp.[Close],
+    sp.Date,
+    RANK() OVER (PARTITION BY c.sector ORDER BY sp.[Close] DESC) AS rank_in_sector
+FROM StockPrices sp
+JOIN companies c ON sp.Ticker = c.ticker;
 
 -- LAG: show yesterday's price next to today's price
 SELECT
-    ticker,
-    price_date,
-    close_price,
-    LAG(close_price) OVER (PARTITION BY ticker ORDER BY price_date) AS prev_day_close
-FROM stock_prices;
+    Ticker,
+    Date,
+    [Close],
+    LAG([Close]) OVER (PARTITION BY Ticker ORDER BY Date) AS prev_day_close
+FROM StockPrices;
 
--- Daily % change using LAG
+-- Daily % change using LAG (real market volatility!)
 SELECT
-    ticker,
-    price_date,
-    close_price,
-    LAG(close_price) OVER (PARTITION BY ticker ORDER BY price_date) AS prev_close,
+    Ticker,
+    Date,
+    [Close],
+    LAG([Close]) OVER (PARTITION BY Ticker ORDER BY Date) AS prev_close,
     ROUND(
-        (close_price - LAG(close_price) OVER (PARTITION BY ticker ORDER BY price_date))
-        / LAG(close_price) OVER (PARTITION BY ticker ORDER BY price_date) * 100
+        ([Close] - LAG([Close]) OVER (PARTITION BY Ticker ORDER BY Date))
+        / LAG([Close]) OVER (PARTITION BY Ticker ORDER BY Date) * 100
     , 2) AS pct_change
-FROM stock_prices;
+FROM StockPrices;
+
+-- 30-day moving average per stock
+SELECT
+    Ticker,
+    Date,
+    [Close],
+    ROUND(AVG([Close]) OVER (
+        PARTITION BY Ticker
+        ORDER BY Date
+        ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+    ), 2) AS MA_30Day
+FROM StockPrices
+ORDER BY Ticker, Date;
 
 -- Running total of volume traded per stock
 SELECT
-    ticker,
-    price_date,
-    volume,
-    SUM(volume) OVER (PARTITION BY ticker ORDER BY price_date) AS cumulative_volume
-FROM stock_prices;
+    Ticker,
+    Date,
+    Volume,
+    SUM(Volume) OVER (PARTITION BY Ticker ORDER BY Date) AS cumulative_volume
+FROM StockPrices;
 
-
-
-
--- What is each stock's rank by closing price?
-SELECT 
-    ticker,
-    close_price,
-    RANK() OVER (ORDER BY close_price DESC) AS my_rank
-FROM stock_prices;
-
-
--- Rank prices but restart ranking for each ticker separately
-SELECT 
-    ticker,
-    price_date,
-    close_price,
-    RANK() OVER (PARTITION BY ticker ORDER BY close_price DESC) AS rank_per_stock
-FROM stock_prices;
-
-
--- Show previous day's closing price next to today's
+-- Rank each day's closing price per stock (1 = highest ever)
 SELECT
-    ticker,
-    price_date,
-    close_price,
-    LAG(close_price) OVER (PARTITION BY ticker ORDER BY price_date) AS yesterday_close
-FROM stock_prices;
+    Ticker,
+    Date,
+    [Close],
+    RANK() OVER (PARTITION BY Ticker ORDER BY [Close] DESC) AS rank_per_stock
+FROM StockPrices;
+
+-- 52-week high and low per stock
+SELECT
+    Ticker,
+    MAX(High)  AS week52_high,
+    MIN(Low)   AS week52_low,
+    MAX(High) - MIN(Low) AS price_range
+FROM StockPrices
+GROUP BY Ticker
+ORDER BY price_range DESC;
 
 
-
-
+-- ============================================================
 -- FINAL PROJECT: Stock Market Analyst Report
 -- Combines: JOINs + Aggregation + CTE + Window Functions
+-- Running on 1,255 rows of REAL market data
+-- ============================================================
 
 WITH stock_summary AS (
     SELECT
-        sp.ticker,
+        sp.Ticker,
         c.company_name,
         c.sector,
-        AVG(sp.close_price)                                               AS avg_close,
-        MAX(sp.close_price)                                               AS best_price,
-        MIN(sp.close_price)                                               AS worst_price,
-        SUM(sp.volume)                                                    AS total_volume,
-        RANK() OVER (ORDER BY AVG(sp.close_price) DESC)                   AS overall_rank,
-        RANK() OVER (PARTITION BY c.sector ORDER BY AVG(sp.close_price) DESC) AS sector_rank
-    FROM stock_prices sp
-    JOIN companies c ON sp.ticker = c.ticker
-    GROUP BY sp.ticker, c.company_name, c.sector
+        ROUND(AVG(sp.[Close]), 2)                                              AS avg_close,
+        MAX(sp.[Close])                                                         AS best_price,
+        MIN(sp.[Close])                                                         AS worst_price,
+        SUM(sp.Volume)                                                          AS total_volume,
+        RANK() OVER (ORDER BY AVG(sp.[Close]) DESC)                             AS overall_rank,
+        RANK() OVER (PARTITION BY c.sector ORDER BY AVG(sp.[Close]) DESC)       AS sector_rank
+    FROM StockPrices sp
+    JOIN companies c ON sp.Ticker = c.ticker
+    GROUP BY sp.Ticker, c.company_name, c.sector
 )
 SELECT
     overall_rank,
